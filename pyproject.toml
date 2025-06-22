@@ -6,7 +6,7 @@ line-length = 79
 
 fix = true
 
-src = [".", "tests"]
+src = ["src", "tests"]
 
 include = ["*.py", "*.pyi"]
 
@@ -31,7 +31,6 @@ select = [
     "RUF",    # собственные правила Ruff
 ]
 
-# Если используешь Black — отключаем длину строки
 ignore = ["D203", "D213", "E501"]  # D203 и D213 конфликтуют, E501 — заменяется Black
 
 [tool.ruff.per-file-ignores]
@@ -39,5 +38,8 @@ ignore = ["D203", "D213", "E501"]  # D203 и D213 конфликтуют, E501 �
 
 [tool.ruff.isort]
 combine-as-imports = true
-known-first-party = ["."]
+known-first-party = ["type"]
 lines-after-imports = 2
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
