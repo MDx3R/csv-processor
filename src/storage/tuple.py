@@ -12,7 +12,7 @@ class Tuple:
     def __post_init__(self):
         assert (
             len(self.values) == self.schema.get_column_count()
-        ), "Value count doesn't match schema"
+        ), f"Value count doesn't match schema: {self.values} vs {self.schema.get_columns()}"
 
     def get_value(self, index: int) -> Value:
         return self.values[index]
