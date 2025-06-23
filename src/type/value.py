@@ -1,6 +1,6 @@
 from typing import Self, overload
 
-from type.enums import ComparisonValue, OperandEnum
+from type.enums import ComparisonOperandEnum, ComparisonValue
 from type.type import Type
 from type.type_enum import TypeEnum
 
@@ -23,34 +23,60 @@ class Value:
         return self._value is None
 
     def cast(self, type_id: TypeEnum) -> "Value":
-        return Type.get_instance(self._type_id).cast(self, type_id)
+        return self.get_instance().cast(self, type_id)
 
     def check_comparable(self, val: "Value") -> bool:
-        return Type.get_instance(self._type_id).check_comparable(self, val)
+        return self.get_instance().check_comparable(self, val)
 
     def compare_equals(self, val: "Value") -> ComparisonValue:
-        return self.compare(val, OperandEnum.EQ)
+        return self.compare(val, ComparisonOperandEnum.EQ)
 
     def compare_not_equals(self, val: "Value") -> ComparisonValue:
-        return self.compare(val, OperandEnum.NEQ)
+        return self.compare(val, ComparisonOperandEnum.NEQ)
 
     def compare_less_than(self, val: "Value") -> ComparisonValue:
-        return self.compare(val, OperandEnum.LT)
+        return self.compare(val, ComparisonOperandEnum.LT)
 
     def compare_less_than_equals(self, val: "Value") -> ComparisonValue:
-        return self.compare(val, OperandEnum.LTE)
+        return self.compare(val, ComparisonOperandEnum.LTE)
 
     def compare_greater_than(self, val: "Value") -> ComparisonValue:
-        return self.compare(val, OperandEnum.GT)
+        return self.compare(val, ComparisonOperandEnum.GT)
 
     def compare_greater_than_equals(self, val: "Value") -> ComparisonValue:
-        return self.compare(val, OperandEnum.GTE)
+        return self.compare(val, ComparisonOperandEnum.GTE)
 
-    def compare(self, val: "Value", op: OperandEnum) -> ComparisonValue:
-        return Type.get_instance(self._type_id).compare(self, val, op)
+    def compare(
+        self, val: "Value", op: ComparisonOperandEnum
+    ) -> ComparisonValue:
+        return self.get_instance().compare(self, val, op)
+
+    def add(self, val: "Value") -> "Value":
+        return self.get_instance().add(self, val)
+
+    def subtract(self, val: "Value") -> "Value":
+        return self.get_instance().subtract(self, val)
+
+    def multiply(self, val: "Value") -> "Value":
+        return self.get_instance().multiply(self, val)
+
+    def divide(self, val: "Value") -> "Value":
+        return self.get_instance().divide(self, val)
+
+    def min(self, val: "Value") -> "Value":
+        return self.get_instance().min(self, val)
+
+    def max(self, val: "Value") -> "Value":
+        return self.get_instance().max(self, val)
 
     def to_string(self) -> str:
-        return Type.get_instance(self._type_id).to_string(self)
+        return self.get_instance().to_string(self)
+
+    def to_boolean(self) -> "Value":
+        return self.get_instance().cast(self, TypeEnum.BOOLEAN)
+
+    def get_instance(self) -> Type:
+        return Type.get_instance(self._type_id)
 
     @classmethod
     def create(cls, type_id: TypeEnum, value: object) -> Self:
@@ -90,3 +116,7 @@ class Value:
     @classmethod
     def create_string(cls, value: str) -> Self:
         return cls.create(TypeEnum.STRING, value)
+
+    @classmethod
+    def create_null_from_type_id(cls, type_id: TypeEnum) -> Self:
+        return cls.create(type_id, None)

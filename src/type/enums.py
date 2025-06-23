@@ -7,10 +7,17 @@ class ComparisonValue(str, Enum):
     FALSE = "false"
 
 
-class OperandEnum(str, Enum):
+class ComparisonOperandEnum(str, Enum):
     EQ = "=="
     NEQ = "!="
     GT = ">"
     GTE = ">="
     LT = "<"
     LTE = "<="
+
+
+class ModificationOperandEnum(str, Enum):
+    ADD = "+"
+    SUB = "-"
+    MULT = "*"
+    DIV = "/"

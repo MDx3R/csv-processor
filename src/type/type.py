@@ -1,7 +1,17 @@
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, ClassVar, Protocol, runtime_checkable
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    ClassVar,
+    Protocol,
+    runtime_checkable,
+)
 
-from type.enums import ComparisonValue, OperandEnum
+from type.enums import (
+    ComparisonOperandEnum,
+    ComparisonValue,
+    ModificationOperandEnum,
+)
 from type.type_enum import NUMERIC_TYPES, TypeEnum
 
 
@@ -40,19 +50,71 @@ class Type(ABC):
 
     @abstractmethod
     def compare(
-        self, left: "Value", right: "Value", op: OperandEnum
+        self, left: "Value", right: "Value", op: ComparisonOperandEnum
     ) -> ComparisonValue: ...
 
+    def serialize(self, val: "Value") -> bytes:
+        return val.to_string().encode()
+
+    @abstractmethod
+    def deserialize(self, raw: bytes) -> "Value": ...
+
+    def add(self, left: "Value", right: "Value") -> "Value":
+        return self.modify(left, right, ModificationOperandEnum.ADD)
+
+    def subtract(self, left: "Value", right: "Value") -> "Value":
+        return self.modify(left, right, ModificationOperandEnum.SUB)
+
+    def multiply(self, left: "Value", right: "Value") -> "Value":
+        return self.modify(left, right, ModificationOperandEnum.MULT)
+
+    def divide(self, left: "Value", right: "Value") -> "Value":
+        return self.modify(left, right, ModificationOperandEnum.DIV)
+
+    def min(self, left: "Value", right: "Value") -> "Value":
+        if not self.check_comparable(left, right):
+            raise TypeError("Values are not comparable")
+        return (
+            left
+            if left.compare_less_than_equals(right) == ComparisonValue.TRUE
+            else right
+        )
+
+    def max(self, left: "Value", right: "Value") -> "Value":
+        if not self.check_comparable(left, right):
+            raise TypeError("Values are not comparable")
+        return (
+            left
+            if left.compare_greater_than_equals(right) == ComparisonValue.TRUE
+            else right
+        )
+
+    def modify(
+        self, left: "Value", right: "Value", op: ModificationOperandEnum
+    ) -> "Value":
+        if not (
+            left.get_type_id() in NUMERIC_TYPES
+            and right.get_type_id() in NUMERIC_TYPES
+        ):
+            raise TypeError("Values are not numeric")
+
+        return self._calculate_modification(left, right, op)
+
+    @abstractmethod
+    def _calculate_modification(
+        self, left: "Value", right: "Value", op: ModificationOperandEnum
+    ) -> "Value": ...
+
     def _compare_with_op(
-        self, lval: Comparable, rval: Comparable, op: OperandEnum
+        self, lval: Comparable, rval: Comparable, op: ComparisonOperandEnum
     ) -> ComparisonValue:
         result = {
-            OperandEnum.EQ: lval == rval,
-            OperandEnum.NEQ: lval != rval,
-            OperandEnum.LT: lval < rval,
-            OperandEnum.LTE: lval <= rval,
-            OperandEnum.GT: lval > rval,
-            OperandEnum.GTE: lval >= rval,
+            ComparisonOperandEnum.EQ: lval == rval,
+            ComparisonOperandEnum.NEQ: lval != rval,
+            ComparisonOperandEnum.LT: lval < rval,
+            ComparisonOperandEnum.LTE: lval <= rval,
+            ComparisonOperandEnum.GT: lval > rval,
+            ComparisonOperandEnum.GTE: lval >= rval,
         }.get(op)
 
         if result is None:
