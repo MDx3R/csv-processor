@@ -28,6 +28,12 @@ class Value:
     def check_comparable(self, val: "Value") -> bool:
         return self.get_instance().check_comparable(self, val)
 
+    def compare_equals_exactly(self, val: "Value") -> ComparisonValue:
+        if self.is_null() and val.is_null():
+            return ComparisonValue.TRUE
+
+        return self.compare(val, ComparisonOperandEnum.EQ)
+
     def compare_equals(self, val: "Value") -> ComparisonValue:
         return self.compare(val, ComparisonOperandEnum.EQ)
 
@@ -103,13 +109,9 @@ class Value:
             case bool():
                 return cls.create(TypeEnum.BOOLEAN, value)
             case ComparisonValue():
-                val = None
-                if value == ComparisonValue.TRUE:
-                    val = True
-                elif value == ComparisonValue.FALSE:
-                    val = False
-
-                return cls.create(TypeEnum.BOOLEAN, val)
+                return cls.create(
+                    TypeEnum.BOOLEAN, ComparisonValue.to_bool(value)
+                )
 
         raise TypeError(f"Unsupported type {type(value)} for boolean value")
 
@@ -120,3 +122,14 @@ class Value:
     @classmethod
     def create_null_from_type_id(cls, type_id: TypeEnum) -> Self:
         return cls.create(type_id, None)
+
+    def __str__(self) -> str:
+        return self.to_string()
+
+    def __eq__(self, value: object) -> bool:
+        return isinstance(value, type(self)) and bool(
+            ComparisonValue.to_bool_strict(self.compare_equals_exactly(value))
+        )
+
+    def __hash__(self):
+        return hash((self._value, self._type_id))
