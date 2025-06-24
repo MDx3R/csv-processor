@@ -8,8 +8,11 @@ from engine.execution.expressions.constant_expression import ConstantExpression
 from engine.execution.expressions.expression import Expression
 from engine.execution.plan.aggregation_plan import AggregationPlan
 from engine.execution.plan.filter_plan import FilterPlan
+from engine.execution.plan.limit_plan import LimitPlan
+from engine.execution.plan.offset_plan import OffsetPlan
 from engine.execution.plan.projection_plan import ProjectionPlan
 from engine.execution.plan.scan_plan import ScanPlan
+from engine.execution.plan.sort_plan import SortPlan
 from engine.execution.planner import (
     AggregateDef,
     QueryPlanner,
@@ -40,6 +43,7 @@ class TestQueryPlanner:
         self.select_expr2.get_return_type.return_value = TypeEnum.INT
         self.where_clause = Mock(spec=Expression)
         self.group_by_expr = Mock(spec=Expression)
+        self.order_by_expr = Mock(spec=Expression)
         self.aggregate_expr = Mock(spec=Expression)
         self.aggregate_def = AggregateDef(
             AggregationType.COUNT, self.aggregate_expr, "count"
@@ -168,6 +172,63 @@ class TestQueryPlanner:
         value = aggregate.expr.evaluate(Mock())
         assert value.compare_equals(Value(TypeEnum.INT, 1))
         assert aggregate.output_name == "count"
+
+    def test_create_plan_with_sort(self):
+        statement = SelectStatement(
+            select_expressions=[self.select_expr1],
+            from_table="table1",
+            group_bys=[],
+            aggregates=[],
+            order_by=[self.order_by_expr],
+        )
+        plan = self.planner.create_plan(statement)
+        assert isinstance(plan, SortPlan)
+        assert plan.get_order_by() == [self.order_by_expr]
+
+        child = plan.get_child()
+        assert isinstance(child, ProjectionPlan)
+
+        grandchild = child.get_child()
+        assert isinstance(grandchild, ScanPlan)
+        assert grandchild.get_table() == self.table
+
+    def test_create_plan_with_limit(self):
+        statement = SelectStatement(
+            select_expressions=[self.select_expr1],
+            from_table="table1",
+            group_bys=[],
+            aggregates=[],
+            limit=10,
+        )
+        plan = self.planner.create_plan(statement)
+        assert isinstance(plan, LimitPlan)
+        assert plan.get_limit() == 10
+
+        child = plan.get_child()
+        assert isinstance(child, ProjectionPlan)
+
+        grandchild = child.get_child()
+        assert isinstance(grandchild, ScanPlan)
+        assert grandchild.get_table() == self.table
+
+    def test_create_plan_with_offset(self):
+        statement = SelectStatement(
+            select_expressions=[self.select_expr1],
+            from_table="table1",
+            group_bys=[],
+            aggregates=[],
+            offset=5,
+        )
+        plan = self.planner.create_plan(statement)
+        assert isinstance(plan, OffsetPlan)
+        assert plan.get_offset() == 5
+
+        child = plan.get_child()
+        assert isinstance(child, ProjectionPlan)
+
+        grandchild = child.get_child()
+        assert isinstance(grandchild, ScanPlan)
+        assert grandchild.get_table() == self.table
 
     def test_create_plan_missing_table(self):
         statement = SelectStatement(
