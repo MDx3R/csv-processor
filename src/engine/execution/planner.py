@@ -17,6 +17,7 @@ from engine.execution.plan.scan_plan import ScanPlan
 from engine.execution.plan.sort_plan import SortPlan
 from storage.schema import Column, Schema
 from storage.table import Table
+from type.type_enum import TypeEnum
 
 
 @dataclass(frozen=True)
@@ -184,20 +185,43 @@ class QueryPlanner:
         self, statement: SelectStatement, table_schema: Schema
     ) -> Schema:
         columns: list[Column] = []
-        for expr in statement.select_expressions:
-            name: str | None = None
+        seen_output_names: set[str] = set()
+
+        # Handle aggregates first to ensure their output names are used
+        for agg in statement.aggregates:
+            name = agg.output_name
+            if name in seen_output_names:
+                continue
+            seen_output_names.add(name)
+            type_id = (
+                agg.column.get_return_type() if agg.column else TypeEnum.INT
+            )
+            columns.append(Column(name, type_id))
+
+        # Handle group by expressions
+        for expr in statement.group_bys:
+            name = expr.to_string()
+            if name in seen_output_names:
+                continue  # Skip if already added via aggregates
+            seen_output_names.add(name)
             type_id = expr.get_return_type()
+            columns.append(Column(name, type_id))
 
-            # Is expr an aggregate
-            for agg in statement.aggregates:
-                if agg.column == expr or agg.column is None:
-                    name = agg.output_name
-                    break
-
-            # Is else (for example, group by)
-            if name is None:
-                name = expr.to_string()
-
+        # Handle remaining select expressions
+        for expr in statement.select_expressions:
+            # Skip if already handled as an aggregate or group by
+            # Can't leave this check out because equal expr could have been processed,
+            # but expr.to_string() wouldn't
+            if (
+                any(agg.column == expr for agg in statement.aggregates)
+                or expr in statement.group_bys
+            ):
+                continue
+            name = expr.to_string()
+            if name in seen_output_names:
+                continue
+            seen_output_names.add(name)
+            type_id = expr.get_return_type()
             columns.append(Column(name, type_id))
 
         return Schema(columns) if columns else table_schema
