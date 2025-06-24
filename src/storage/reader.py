@@ -28,6 +28,8 @@ class CSVTableReader(TableReader):
 
         with path.open("r", newline="") as csvfile:
             reader = csv.reader(csvfile)
+            if self._table.get_skip_first():
+                next(reader, None)
             for row in reader:
                 values: list[Value] = []
                 for i, raw in enumerate(row):

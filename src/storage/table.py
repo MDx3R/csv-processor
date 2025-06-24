@@ -24,9 +24,15 @@ class StringTable(Table):
 
 
 class CSVTable(Table):
-    def __init__(self, path: str, schema: Schema) -> None:
+    def __init__(
+        self, path: str, schema: Schema, skip_first: bool = True
+    ) -> None:
         super().__init__(schema)
         self._path = path
+        self._skip_first = skip_first
 
     def get_path(self) -> str:
         return self._path
+
+    def get_skip_first(self) -> bool:
+        return self._skip_first

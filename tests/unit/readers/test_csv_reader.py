@@ -27,7 +27,7 @@ class TestCSVTableReader:
             mode="w+", delete=False, suffix=".csv"
         ) as temp_file:
             self.write_file(temp_file, "value1,123\nvalue2,456\n")
-            table = CSVTable(temp_file.name, self.schema)
+            table = CSVTable(temp_file.name, self.schema, skip_first=False)
             reader = CSVTableReader(table)
 
             tuples = list(reader.read())
@@ -53,7 +53,7 @@ class TestCSVTableReader:
         with tempfile.NamedTemporaryFile(
             mode="w+", delete=False, suffix=".csv"
         ) as empty_file:
-            table = CSVTable(empty_file.name, self.schema)
+            table = CSVTable(empty_file.name, self.schema, skip_first=False)
             reader = CSVTableReader(table)
             tuples = list(reader.read())
             assert len(tuples) == 0
@@ -64,7 +64,7 @@ class TestCSVTableReader:
         ) as temp_file:
             temp_file.write("value1,123\n")
             temp_file.flush()
-            table = CSVTable(temp_file.name, self.schema)
+            table = CSVTable(temp_file.name, self.schema, skip_first=False)
             reader = CSVTableReader(table)
             tuples = list(reader.read())
             assert len(tuples) == 1
@@ -81,9 +81,26 @@ class TestCSVTableReader:
         ) as temp_file:
             temp_file.write("value1\n")  # Missing second column
             temp_file.flush()
-            table = CSVTable(temp_file.name, self.schema)
+            table = CSVTable(temp_file.name, self.schema, skip_first=False)
             reader = CSVTableReader(table)
             with pytest.raises(
                 AssertionError, match="Value count doesn't match schema"
             ):
                 list(reader.read())
+
+    def test_read_skips_first_line(self):
+        with tempfile.NamedTemporaryFile(
+            mode="w+", delete=False, suffix=".csv"
+        ) as temp_file:
+            temp_file.write("value,int\nvalue1,123\n")
+            temp_file.flush()
+            table = CSVTable(temp_file.name, self.schema)
+            reader = CSVTableReader(table)
+            tuples = list(reader.read())
+            assert len(tuples) == 1
+            assert (
+                tuples[0]
+                .values[0]
+                .compare_equals(Value(TypeEnum.STRING, "value1"))
+            )
+            assert tuples[0].values[1].compare_equals(Value(TypeEnum.INT, 123))
