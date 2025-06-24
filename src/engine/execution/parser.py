@@ -1,6 +1,7 @@
 import argparse
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from pathlib import Path
 
 from engine.execution.aggregate import AggregationType, get_start_count_expr
 from engine.execution.expressions.column_expression import ColumnExpression
@@ -13,7 +14,8 @@ from engine.execution.planner import (
     AggregateDef,
     SelectStatement,
 )
-from storage.schema import Column, Schema
+from storage.schema import Column
+from storage.table import Table
 from type.enums import ComparisonOperandEnum
 from type.value import Value
 
@@ -24,24 +26,33 @@ class Parser(ABC):
 
 
 class ExpressionResolver:
-    def __init__(self, schema: Schema) -> None:
-        self.schema = schema
+    def __init__(self, table_registry: dict[str, Table]) -> None:
+        self.table_registry = table_registry
 
-    def resolve_column(self, name: str) -> Column:
-        for column in self.schema.columns:
+    def resolve_column(self, name: str, table_name: str) -> Column:
+        table = self.ensure_table(table_name)
+        schema = table.get_schema()
+
+        for column in schema.columns:
             if column.name == name:
                 return column
         raise ValueError(f"Column '{name}' not found in schema")
 
-    def resolve_column_expression(self, name: str) -> ColumnExpression:
-        return ColumnExpression(self.resolve_column(name))
+    def resolve_column_expression(
+        self, name: str, table_name: str
+    ) -> ColumnExpression:
+        return ColumnExpression(self.resolve_column(name, table_name))
 
-    def resolve_comparison(self, condition: str) -> ComparisonExpression:
+    def resolve_comparison(
+        self, condition: str, table_name: str
+    ) -> ComparisonExpression:
         operators = ["!=", ">=", "<=", "=", "<", ">"]
         for op in operators:
             if op in condition:
                 left_str, right_str = condition.split(op, 1)
-                left = self.resolve_column_expression(left_str.strip())
+                left = self.resolve_column_expression(
+                    left_str.strip(), table_name
+                )
                 right_val = self._parse_value(right_str.strip())
                 right = ConstantExpression(right_val)
 
@@ -58,6 +69,11 @@ class ExpressionResolver:
                     }[op],
                 )
         raise ValueError(f"Invalid condition: {condition}")
+
+    def ensure_table(self, table_name: str) -> Table:
+        table = self.table_registry.get(table_name)
+        assert table, ValueError(f"Table '{table_name}' not found")
+        return table
 
     def _parse_value(self, raw: str) -> Value:
         if raw.lower() in ("true", "false"):
@@ -77,6 +93,9 @@ class QueryConfig:
     where: str | None
     aggregates: list[str]
     group_bys: list[str]
+    sort: list[str]
+    offset: int | None
+    limit: int | None
 
 
 class ConsoleSelectParser(Parser):
@@ -85,18 +104,26 @@ class ConsoleSelectParser(Parser):
 
     def parse_config(self, args: list[str]) -> QueryConfig:
         parser = argparse.ArgumentParser()
-        parser.add_argument("--table", required=True)
+        parser.add_argument("--table, --file", dest="table", required=True)
         parser.add_argument("--where")
         parser.add_argument("--aggregate", action="append", default=[])
         parser.add_argument("--group-by", action="append", default=[])
+        parser.add_argument(
+            "--sort", "--order-by", dest="sort", action="append", default=[]
+        )
+        parser.add_argument("--offset", type=int)
+        parser.add_argument("--limit", type=int)
 
         parsed = parser.parse_args(args)
 
         return QueryConfig(
-            table=parsed.table,
+            table=Path(parsed.table).stem,
             where=parsed.where,
             aggregates=parsed.aggregate,
             group_bys=parsed.group_by,
+            sort=parsed.sort,
+            offset=parsed.offset,
+            limit=parsed.limit,
         )
 
     def parse(self, args: list[str]) -> SelectStatement:
@@ -104,21 +131,29 @@ class ConsoleSelectParser(Parser):
 
         # WHERE
         where_expr = (
-            self.resolver.resolve_comparison(config.where)
+            self.resolver.resolve_comparison(config.where, config.table)
             if config.where
             else None
         )
 
         # GROUP BY
         group_by_exprs: list[Expression] | None = [
-            self.resolver.resolve_column_expression(col)
+            self.resolver.resolve_column_expression(col, config.table)
             for col in config.group_bys
         ]
 
-        # AGGREGATES
-        aggregates = [self._parse_aggregate(s) for s in config.aggregates]
+        # SORT
+        sort_exprs: list[Expression] = [
+            self.resolver.resolve_column_expression(col, config.table)
+            for col in config.sort
+        ]
 
-        # SELECT exprs
+        # AGGREGATES
+        aggregates = [
+            self._parse_aggregate(s, config.table) for s in config.aggregates
+        ]
+
+        # SELECT
         select_exprs = self._infer_select_expressions(
             group_by_exprs, aggregates
         )
@@ -129,9 +164,12 @@ class ConsoleSelectParser(Parser):
             where_clause=where_expr,
             group_bys=group_by_exprs,
             aggregates=aggregates,
+            order_by=sort_exprs,
+            offset=config.offset,
+            limit=config.limit,
         )
 
-    def _parse_aggregate(self, s: str) -> AggregateDef:
+    def _parse_aggregate(self, s: str, table_name: str) -> AggregateDef:
         if "=" not in s:
             raise ValueError(
                 f"Invalid aggregate format: '{s}' (expected column=FUNC)"
@@ -143,7 +181,7 @@ class ConsoleSelectParser(Parser):
         column_expr = None
         if col_str != "*":
             column_expr = self.resolver.resolve_column_expression(
-                col_str.strip()
+                col_str.strip(), table_name
             )
 
         output_name = f"{func_str.lower()}({col_str})"
