@@ -12,6 +12,29 @@ from storage.tuple import Tuple
 from type.type_enum import TypeEnum
 
 
+example_schema = Schema(
+    columns=[
+        Column(name="id", type_id=TypeEnum.INT),
+        Column(name="name", type_id=TypeEnum.STRING),
+        Column(name="price", type_id=TypeEnum.DECIMAL),
+    ]
+)
+products_schema = Schema(
+    columns=[
+        Column(name="name", type_id=TypeEnum.STRING),
+        Column(name="brand", type_id=TypeEnum.STRING),
+        Column(name="price", type_id=TypeEnum.INT),
+        Column(name="rating", type_id=TypeEnum.DECIMAL),
+    ]
+)
+example_table = CSVTable(schema=example_schema, path="data/example.csv")
+products_table = CSVTable(schema=products_schema, path="data/products.csv")
+table_registry: dict[str, Table] = {
+    "example": example_table,
+    "products": products_table,
+}
+
+
 def display_tuples(tuples: list[Tuple]) -> str:
     if not tuples:
         return "No data to display."
@@ -24,35 +47,21 @@ def display_tuples(tuples: list[Tuple]) -> str:
 
 
 def main():
-    schema = Schema(
-        columns=[
-            Column(name="id", type_id=TypeEnum.INT),
-            Column(name="name", type_id=TypeEnum.STRING),
-            Column(name="price", type_id=TypeEnum.DECIMAL),
-        ]
-    )
-    example_table = CSVTable(
-        schema=Schema(
-            columns=[
-                Column(name="id", type_id=TypeEnum.INT),
-                Column(name="name", type_id=TypeEnum.STRING),
-                Column(name="price", type_id=TypeEnum.DECIMAL),
-            ]
-        ),
-        path="data/example.csv",
-    )
-
-    table_registry: dict[str, Table] = {"example": example_table}
+    args = sys.argv[1:]
+    assert args, "Args required"
 
     query_planner = QueryPlanner(table_registry)
-    executor_factory = ExecutorFactory(table_registry)
-    resolver = ExpressionResolver(schema)
+    resolver = ExpressionResolver(table_registry)
     parser = ConsoleSelectParser(resolver)
 
-    engine = Engine(table_registry, parser, query_planner, executor_factory)
+    stmt = parser.parse(args)
+    plan = query_planner.create_plan(stmt)
+
+    executor_factory = ExecutorFactory(table_registry)
+    engine = Engine(plan, executor_factory)
 
     try:
-        result = engine.run(sys.argv[1:])
+        result = engine.run()
     except Exception as e:
         import traceback
 
