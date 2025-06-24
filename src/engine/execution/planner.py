@@ -10,8 +10,11 @@ from engine.execution.expressions.expression import Expression
 from engine.execution.plan.aggregation_plan import AggregationPlan
 from engine.execution.plan.execution_plan import ExecutionPlan
 from engine.execution.plan.filter_plan import FilterPlan
+from engine.execution.plan.limit_plan import LimitPlan
+from engine.execution.plan.offset_plan import OffsetPlan
 from engine.execution.plan.projection_plan import ProjectionPlan
 from engine.execution.plan.scan_plan import ScanPlan
+from engine.execution.plan.sort_plan import SortPlan
 from storage.schema import Column, Schema
 from storage.table import Table
 
@@ -29,6 +32,9 @@ class SelectStatement:
     from_table: str
     group_bys: list[Expression]
     aggregates: list[AggregateDef]
+    order_by: list[Expression] | None = None
+    limit: int | None = None
+    offset: int | None = None
     where_clause: Expression | None = None
 
 
@@ -116,7 +122,16 @@ class QueryPlanner:
 
         output_schema = self._construct_output_schema(statement, table_schema)
 
-        return self._build_projection_plan(output_schema, plan)
+        plan = self._build_projection_plan(output_schema, plan)
+
+        if statement.order_by:
+            plan = SortPlan(statement.order_by, output_schema, plan)
+        if statement.offset is not None:
+            plan = OffsetPlan(statement.offset, output_schema, plan)
+        if statement.limit is not None:
+            plan = LimitPlan(statement.limit, output_schema, plan)
+
+        return plan
 
     def _build_aggregation_plan(
         self,
